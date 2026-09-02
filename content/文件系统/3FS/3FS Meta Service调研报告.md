@@ -74,7 +74,7 @@ Metadata Service 采用 inode 和 dentry 分离的设计思路，两种结构的
 
 | Table name   | key                                   | value                                             | 说明                                                                                                                                                                                                        |
 | ------------ | ------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dentry Table | "DENT" + parent inode_id + entry name | parent_id, name, inode_type, dirAcl, uuid, gcInfo | Inode和Dentry编码到两张逻辑表，且FoundationDB按Range分片[^1]，全局有序，从而将不同类型数据从物理上隔离，对Readdir场景遍历dentry友好<br><br>Dentry Table的key把附录inode id作为前缀，同一目录下dentry在物理上连续放置，Readdir请求可以通过Scan连续读取<br>                             |
+| Dentry Table | "DENT" + parent inode_id + entry name | parent_id, name, inode_type, dirAcl, uuid, gcInfo | Inode和Dentry编码到两张逻辑表，且FoundationDB按Range分片[^1]，全局有序，从而将不同类型数据从物理上隔离，对Readdir场景遍历dentry友好<br><br>Dentry Table的key把父inode id作为前缀，同一目录下dentry在物理上连续放置，Readdir请求可以通过Scan连续读取<br>                              |
 | Inode Table  | "INOD" + inode_id                     | 基本属性 + 附加属性                                       | Inode id小端存储[^2]， 利用inode id连续分配，以及FoundationDB全局有序特性，可以将inode散列在不同的数据分片上，GetAttr请求集群内分布跟均衡，提升系统吞出<br><br>同一文件的inode和dentry未做数据亲和处理，dentry和inode可能落在不同的FoundationDB不同的数据分片上，Lookup时需要跨分片读取一次inode<br><br> |
 
 ### 3.1.2 举例
