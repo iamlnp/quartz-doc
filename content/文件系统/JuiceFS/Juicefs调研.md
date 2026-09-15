@@ -7,46 +7,10 @@ imageNameKey: Juicefs调研
 tags:
   - 技术学习
   - 文件系统
-git tags: v1.3.1
+git tags:
 ---
 # 1 整体架构  
 JuiceFS的核心设计理念是“数据”与“元数据”分离[^1]。它将文件数据存储在对象存储中，并将对应的元数据（如文件名、权限、目录结构）存放在独立的数据库中。这种架构使其能够利用对象存储的海量、低成本优势，同时通过元数据引擎提供高性能的文件系统语义。  
-```mermaid
-flowchart TD
-    A[JuiceFS Client<br>（富客户端）]
-
-    A -- 元数据操作 --> B[(元数据引擎)]
-    A -- 数据读写 --> C[（对象存储）]
-    
-    B1[Redis / TiKV / MySQL ...]
-    C1[AWS S3 / 阿里云 OSS / MinIO ...]
-
-    B --> B1
-    C --> C1
-
-    subgraph B1 [支持多种数据库]
-        direction LR
-        Redis[Redis]
-        TiKV[TiKV]
-        MySQL[MySQL]
-        PostgreSQL[PostgreSQL]
-        SQLite[SQLite]
-    end
-
-    subgraph C1 [支持几乎所有对象存储]
-        direction LR
-        S3[AWS S3]
-        OSS[阿里云 OSS]
-        MinIO[MinIO]
-        Ceph[Ceph RGW]
-        Others[等30+种]
-    end
-
-    style A fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    style B fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style C fill:#fff3e0,stroke:#e65100,stroke-width:2px
-```
-
 ![616](assets/Juicefs调研/file-20260514112647085.png)
 1. **JuiceFS客户端**被设计为“富客户端”，是系统中最关键的部分。所有的文件I/O操作，甚至包括数据压缩和垃圾文件过期等后台任务，都在JuiceFS客户端中执行 。这种设计使得元数据服务能够独立运行，不存状态信息，从而提升了系统的可伸缩性和可靠性 。客户端以单个二进制文件的形式分发，简化了在Linux、macOS和Windows等不同平台上的安装和兼容性 。它提供了多种访问方式，以适应不同的应用场景，包括POSIX挂载点、Hadoop Java SDK、Kubernetes CSI驱动和S3网关。
 2. **元数据引擎**负责存储所有文件系统的元数据，包括常见的文件系统元数据（如文件名、大小、权限信息、ctime和mtime、目录结构、符号链接、文件锁）以及JuiceFS特有的元数据（如文件inode、分块和分片映射、客户端会话等）。其主要作用是维护文件系统的目录树结构和各个文件的属性。元数据引擎的性能是文件系统整体性能的关键瓶颈之一。
@@ -57,6 +21,9 @@ flowchart TD
 | 客户端   | 文件I/O接口和数据流协调 | 处理所有文件I/O，包括后台任务；提供多种访问协议；实现客户端侧缓存和预读        | POSIX (FUSE), Hadoop Java SDK, Kubernetes CSI Driver, S3 Gateway, Python SDK |
 | 元数据引擎 | 维护文件系统结构和文件属性 | 存储文件名、大小、权限、时间戳、目录结构、文件锁、inode、分块/分片映射、客户端会话 | Redis, TiKV, MySQL, PostgreSQL, FoundationDB ; 专有高性能引擎 (企业版)                 |
 | 数据存储  | 实际文件内容持久化     | 存储分块后的文件数据；提供数据可靠性和一致性                       | 公共云对象存储 (AWS S3), 自建对象存储 (Ceph, MinIO)                                       |
+## 核心分层  
+
+
 ## 1.1 核心协议与语义  
 JuiceFS 通过不同的接入方式，为上层应用提供了丰富的访问语义，确保与现有生态无缝集成。  
 
@@ -268,6 +235,18 @@ type Slice struct {
     - value 尽量紧凑，减少存储和网络开销 
     - value结构化，便于反序列化和升级 
     - value支持扩展（如增加 ACL、配额等字段）
+
+**key的编码方案** ：  
+所有元数据 key 通过 `fmtKey()` 方法编码，将前缀字符 + inode（8 字节小端序）+ 子类型字符 + 可变部分拼接成定长或变长 key，格式比如：  
+```bash
+AiiiiiiiiI         → inode 属性（inode attribute）
+AiiiiiiiiD...      → dentry（目录项，... 为文件名）
+AiiiiiiiiPiiiiiiii → 硬链接的 parent 索引
+AiiiiiiiiCnnnn     → 文件 chunk（nnnn 为 chunk index）
+AiiiiiiiiS         → symlink 目标
+AiiiiiiiiX...      → 扩展属性
+```
+
 
 
 ## 2.2 元数据操作  

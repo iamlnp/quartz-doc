@@ -29,3 +29,4 @@ hermes doctor
 
 国内 API 配置  
 Hermes 本身免费，**必须配置大模型 API 密钥才能读写代码、执行任务**  
+github库：https://github.com/NousResearch/hermes-agent
