@@ -7,6 +7,7 @@ imageNameKey: Juicefs调研
 tags:
   - 技术学习
   - 文件系统
+  - juicefs
 git tags:
 ---
 # 1 整体架构  
@@ -21,10 +22,10 @@ JuiceFS的核心设计理念是“数据”与“元数据”分离[^1]。它将
 | 客户端   | 文件I/O接口和数据流协调 | 处理所有文件I/O，包括后台任务；提供多种访问协议；实现客户端侧缓存和预读        | POSIX (FUSE), Hadoop Java SDK, Kubernetes CSI Driver, S3 Gateway, Python SDK |
 | 元数据引擎 | 维护文件系统结构和文件属性 | 存储文件名、大小、权限、时间戳、目录结构、文件锁、inode、分块/分片映射、客户端会话 | Redis, TiKV, MySQL, PostgreSQL, FoundationDB ; 专有高性能引擎 (企业版)                 |
 | 数据存储  | 实际文件内容持久化     | 存储分块后的文件数据；提供数据可靠性和一致性                       | 公共云对象存储 (AWS S3), 自建对象存储 (Ceph, MinIO)                                       |
-## 核心分层  
+## 1.1 核心分层  
 
 
-## 1.1 核心协议与语义  
+## 1.2 核心协议与语义  
 JuiceFS 通过不同的接入方式，为上层应用提供了丰富的访问语义，确保与现有生态无缝集成。  
 
 | 协议/语义      | 支持度  | 核心技术            | 关键特性                                              |
@@ -50,7 +51,7 @@ JuiceFS 通过不同的接入方式，为上层应用提供了丰富的访问语
 5. 目录配额
 6. 分布式缓存
 
-### 1.1.1 对象存储语义  
+### 1.2.1 对象存储语义  
 JuiceFS 本质上是一个分布式文件系统，它利用对象存储作为数据持久化层。除了将底层对象存储作为“黑盒”使用外，它本身也向外（尤其是通过其 **S3 网关**）呈现了丰富的对象存储语义和特性。  
 S3网关是JuiceFS 对外提供对象存储语义最核心的途径。通过 S3 网关，JuiceFS 将一个文件系统“伪装”成了一个 S3 兼容的对象存储服务
 可以使用 AWS CLI、s3cmd、MinIO Client 等标准的 S3 工具直接访问 JuiceFS 文件系统中的数据[^7]。S3 网关支持的核心对象操作包括：
@@ -83,7 +84,7 @@ flowchart TD
     style F fill:#fff3e0,stroke:#e65100,stroke-width:2px
 ```
 
-#### 1.1.1.1 关键对象存储语义与特性  
+#### 1.2.1.1 关键对象存储语义与特性  
 1. **强一致性**：JuiceFS 提供**强一致性**保证，一旦数据写入完成，后续的任何读操作（无论通过何种接口）都将立即看到最新数据[^9]。这解决了原生对象存储常见的“写后读”一致性问题。
 2. **对象生命周期管理**：JuiceFS 支持为文件系统设置**默认的存储类**（如标准、低频、归档），新写入的数据会自动使用该设置。你可以组合使用对象存储的**生命周期规则**和 JuiceFS 的**多级缓存**来自动管理数据的冷热分层
 3. **数据保护与安全**: 
@@ -98,11 +99,11 @@ flowchart TD
     - **多版本与克隆**：**企业版**支持基于元数据的即时目录克隆与分支管理，可作为低成本的对象版本控制方案
 7. **监控与可观测性**：JuiceFS 通过 Prometheus API 提供丰富的监控指标
 
-## 1.2 源码结构说明
+## 1.3 源码结构说明
 juiceFS社区版总代码量约7万行，很精简，且用go语言构成， 逻辑清晰简洁，远远优于较C++构成的代码栈，但是社区版缺失一些企业版的组件，会有功能限制，后文会详细说明社区版的缺失。 [^10]   
 ![|800](assets/Juicefs调研/file-20260515212402433.png)  
 
-### 1.2.1 JuiceFS 源码大体结构  
+### 1.3.1 JuiceFS 源码大体结构  
 - cmd 是代码结构总入口，所有相关功能都能在此找到入口，如 juicefs format 命令对应着 cmd/format.go
 - pkg 是具体实现，核心逻辑都在其中：
     - `pkg/fuse/fuse.go` 是 FUSE 实现的入口，提供抽象 FUSE 接口
@@ -115,7 +116,7 @@ juiceFS社区版总代码量约7万行，很精简，且用go语言构成， �
     - `pkg/object` 是与各种对象存储对接的实现
 - pkg/object 是与各种对象存储对接的实现
 
-### 1.2.2 对象网关  
+### 1.3.2 对象网关  
 - `minio/cmd/gateway-unsupported.go`：可继承该类实现各种自定义的对象网关
 - `juicefs/cmd/gateway.go`：S3对象网关入口的封装，网关的启动
 - `juicefs/cmd/gateway.go`：S3对象网关入口的封装，网关的启动
@@ -125,12 +126,12 @@ juiceFS社区版总代码量约7万行，很精简，且用go语言构成， �
 - `minio/cmd/gateway-hdfs.go` 
 - `minio/cmd/gateway-azure.go` 
 分别实现将minio数据写入到S3、hdfs、azure类型的后端存储
-### 1.2.3 文件系统 
+### 1.3.3 文件系统 
 - `juicefs/cmd/format.go`：初始化和创建文件系统 
 - `juicefs/pkg/fs.go`：实现FileSystem类和接口的封装 
 - `juicefs/pkg/vfs/*`：实现文件系统vfs的读写等接口 
 - `juicefs/pkg/fuse/*`：实现fuse接口封装
-### 1.2.4 元数据引擎 
+### 1.3.4 元数据引擎 
 - `juicefs/pkg/meta/base.go`：元数据引擎接口类 
 - `juicefs/pkg/meta/redis.go`：redis元数据引擎接口实现 
 - `juicefs/pkg/meta/sql.go`：sql类型元数据引擎接口实现 
@@ -139,7 +140,7 @@ juiceFS社区版总代码量约7万行，很精简，且用go语言构成， �
     - `tkv_tikv.go`：实现对接TiKV作为元数据引擎 
     - `tkv_fdb.go`：实现对接FoundationDB作为元数据引擎 
 也支持一些其他非主流KV
-### 1.2.5 数据引擎 
+### 1.3.5 数据引擎 
 数据引擎将数据以chunk、block、splice进行切分，然后写入到后端存储。 
 - `juicefs/pkg/object`：实现将数据写入到各种后端存储，支持数十种存储后端： 
 - `juicefs/pkg/object/ceph.go`：实现将数据写入后端ceph rados 
@@ -169,7 +170,8 @@ juiceFS社区版总代码量约7万行，很精简，且用go语言构成， �
 ## 2.1 元数据模型
 JuiceFS 的元数据层是整个分布式文件系统的核心，负责管理文件、目录、权限、配额、锁等所有元信息。其设计目标是高性能、强一致、可扩展、可多后端适配， 但是其社区版存在一定缺失和妥协。
 
-**元数据数据模型**：Inode、分块、分片映射。元数据引擎存储常见的文件系统元数据（文件名、大小、权限等）和JuiceFS特有的元数据，包括inode、分块和分片的关键映射信息 。对于inode键，通过将“INOD”前缀与inode ID连接来创建，inode ID以小端字节序编码（与3FS/TFS设计方法类似），以确保inode在多个FoundationDB节点上均匀分布。这种编码策略对于底层键值存储中的负载均衡有好处。  
+### 2.1.1 **元数据数据模型**
+Inode、分块、分片映射。元数据引擎存储常见的文件系统元数据（文件名、大小、权限等）和JuiceFS特有的元数据，包括inode、分块和分片的关键映射信息 。对于inode键，通过将“INOD”前缀与inode ID连接来创建，inode ID以小端字节序编码（与3FS/TFS设计方法类似），以确保inode在多个FoundationDB节点上均匀分布。这种编码策略对于底层键值存储中的负载均衡有好处。  
 
 内部数据结构层面，JuiceFS维护一个目录树结构。node记录每个文件或目录的属性，Entry描述父子节点之间的关系，Extent记录数据的位置。这些轻量级结构有助于提高内存效率  
 
@@ -236,7 +238,7 @@ type Slice struct {
     - value结构化，便于反序列化和升级 
     - value支持扩展（如增加 ACL、配额等字段）
 
-**key的编码方案** ：  
+### 2.1.2 **key的编码方案**   
 所有元数据 key 通过 `fmtKey()` 方法编码，将前缀字符 + inode（8 字节小端序）+ 子类型字符 + 可变部分拼接成定长或变长 key，格式比如：  
 ```bash
 AiiiiiiiiI         → inode 属性（inode attribute）
@@ -246,8 +248,44 @@ AiiiiiiiiCnnnn     → 文件 chunk（nnnn 为 chunk index）
 AiiiiiiiiS         → symlink 目标
 AiiiiiiiiX...      → 扩展属性
 ```
+**核心设计**：同一 inode 的所有元数据在 key 空间中以 `A` + inode 为前缀**连续排列**，这意味着对单个 inode 的范围扫描可以高效获取其全部关联数据。  
+#### 2.1.2.1 Inode 的存储  
+**Key**: `A` + 8字节inode + `I`（共 10 字节）  
+**Value**: 通过 `marshal(attr)` 将 Attr 结构体序列化为二进制，包含 type、mode、uid、gid、atime/mtime/ctime、nlink、length 等全部 POSIX 属性。读取时通过 `parseAttr(buf, attr)` 反序列化。  
+**写盘示例**（创建文件时，tkv.go Mknod）：  
+```go
+tx.set(m.inodeKey(*inode), m.marshal(attr))       // 写入 inode 属性
+tx.set(m.entryKey(parent, name), m.packEntry(_type, *inode))  // 写入 dentry
+```
+#### 2.1.2.2 Dentry 的存储  
+**Key**: A + 8字节parent_inode + D + 文件名（变长）  
+**Value**: 通过 `packEntry(_type, inode)` 编码为固定 9 字节：1 字节类型 + 8 字节 inode 号。反序列化通过 `parseEntry(buf)` 返回 (type, inode)。
+**目录列表**（doReaddir）利用 FDB 的范围扫描，对 `A{parent}D` 前缀做 scan：这会一次性获取该目录下所有 dentry，然后逐条 `parseEntry` 还原出 (type, inode)，再按需批量读取 inode 属性（`fillAttr`）。  
+#### 2.1.2.3 FoundationDB 事务与写盘机制  
+**事务模型**：  
+`fdbClient` 直接利用 FoundationDB 的原生 OCC 事务：
 
+| 方法          | FDB API                              | 用途                               |
+| ----------- | ------------------------------------ | -------------------------------- |
+| `txn`       | `client.Transact`                    | 读写事务（Mknod/Unlink/Rename 等）      |
+| `simpleTxn` | `client.ReadTransact` + `Snapshot()` | 只读操作（Lookup/GetAttr），**不加入冲突追踪** |
+关键操作映射到 FDB 原生 API：
+- tx.set(key, value) → fdb.Transaction.Set
+- tx.delete(key) → fdb.Transaction.Clear
+- tx.append(key, value) → fdb.Transaction.AppendIfFits（原子追加，用于 chunk slice 列表）
+- tx.incrBy(key, value) → fdb.Transaction.Add（原子加法，用于计数器/硬链接 parent 引用）
 
+**写盘流程（以 Mknod 为例）**：  
+- 客户端本地锁：m.txBatchLock(parent) 对 parent inode 加本地锁，减少并发冲突
+- 开启 FDB 事务：m.client.txn(ctx, f, retry) → client.Transact(...)
+- 事务内读取：通过 tx.gets(...) 并行读取 parent 属性和已有 dentry（加入 FDB 读集，参与冲突检测）
+- 事务内写入：
+    - tx.set(m.inodeKey(newInode), m.marshal(attr)) — 写 inode 属性
+    - tx.set(m.entryKey(parent, name), m.packEntry(type, inode)) — 写 dentry
+    - tx.set(m.inodeKey(parent), m.marshal(&pattr)) — 更新 parent 的 mtime/nlink
+    - tx.set(m.dirStatKey(inode), ...) — 目录统计信息
+    - 写 changelog（genLog）
+- 提交：FDB 的 OCC 在 commit 时自动检测冲突，若有冲突则整个事务由 FDB 内部自动重试（JuiceFS 层面 shouldRetry 返回 false，因为 FDB 自己处理了重试）
 
 ## 2.2 元数据操作  
 ### 2.2.1 基于路径查询文件  
@@ -367,9 +405,14 @@ JuiceFS 的 S3 网关（`cmd/gateway/s3.go`）本质是 “协议转换器”，
 - **底层对象无元数据**：对象存储只存 Slice 裸数据，不维护目录、文件名、属性，从根源杜绝分裂；
 - **事务 + 版本控制**：元数据修改带版本号，多挂载点、多网关并发通过 CAS 保证强一致。
 
-# 6 参考
+# 6 编译  
+
+# 7 部署  
+
+# 8 参考
 1. [tfs元数据kv结构（持久化及内存）梳理](http://10.128.106.117/pages/viewpage.action?pageId=77422159)
 2. [JuiceFS的架构设计特点分析-V3.docx](https://lenovonetapp-my.sharepoint.cn/:w:/g/personal/peng_chen_lenovonetapp_com/IQDeDnJ026kdQbkbRd5Ka4CYAXHz3wFf4J2wEdTZ4ATWItY?e=IoqkAX)
+3. [JuiceFS 简介](https://juicefs.com/docs/zh/community/introduction/)
 
 [^1]: https://www.juicefs.io/docs/community/introduction/
 [^2]: https://www.juicefs.io/docs/community/introduction/

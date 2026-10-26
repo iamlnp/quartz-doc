@@ -31,3 +31,6 @@ qodercli --version
 ```bash
 /root/.local/bin/qoderclicn --version
 ```
+
+
+1. 交互模式下： Shift+Tab切换权限模式
