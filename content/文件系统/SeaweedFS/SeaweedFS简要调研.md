@@ -1,6 +1,6 @@
 https://github.com/seaweedfs/seaweedfs
 # 核心组件架构
-它最初的设计灵感来源于 Facebook 的 [[Haystack 架构]]，特别擅长处理海量小文件的存储与访问。
+它最初的设计灵感来源于 Facebook 的 [[../../../../【02】技术笔记/12-架构/Haystack 架构]]，特别擅长处理海量小文件的存储与访问。
 SeaweedFS 的架构设计非常清晰，主要包含以下三个核心角色：
 
 | 组件名称          | 主要职责 | 特点                                                       |
