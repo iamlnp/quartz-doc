@@ -1,3 +1,31 @@
 @use "./variables.scss" as *;
 
 // put your custom CSS here!
+
+// Explorer: allow deep hierarchies to scroll properly
+.sidebar.left .explorer {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar.left .explorer .explorer-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+}
+
+.sidebar.left div:has(> .overflow.explorer-ul) {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.sidebar.left .explorer-ul.overflow {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.sidebar.left .explorer-ul.overflow.gradient-active {
+  mask-image: none;
+}
