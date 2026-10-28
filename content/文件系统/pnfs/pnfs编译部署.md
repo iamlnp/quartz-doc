@@ -1,3 +1,14 @@
+---
+年份:
+  - "2026"
+月份:
+  - 10月
+imageNameKey: pnfs编译部署
+创建时间: 2026-10-28 14:06
+修改时间: 2026-10-28 14:10
+tags:
+  - pnfs
+---
 # 1 单节点编译部署
 ## 1.1 环境概览
 ### 1.1.1 系统环境
@@ -1112,6 +1123,8 @@ hostname = 137.33.24.134
 cluster_bind_addr = 137.33.24.134
 ```
 
+> **注意（transient_state_cache）**：上述实验室配置里 `transient_state_cache = true`，含义是 open/layout 协议状态**不写 RonDB**、以各 MDS 内存为权威（main.c 启动日志会打 "transient_state_cache=on (open/layout backend writes skipped)"）。单 MDS 或"每个客户端固定黏在一个 MDS 上"的用法没问题；若要利用 active-active 跨 MDS 共享协议状态（任一 MDS 可服务任一客户端的 OPEN/recall），应改为 `false`（默认值），代价是每次 open/grant 多一次 NDB 写。
+
 5. 在每个MDS挂载DS导出
 为了准备文件句柄，MDS需要使用nfsv3挂载每个DS导出，这些挂载DS导出并不是客户端数据路径，客户端依然通过pNFS向这些DS直接写入数据  
 ```bash
@@ -1177,7 +1190,7 @@ shard1  shard2  shard3
 每个 `shardN` 都是一个 NFSv4 `fs_locations` referral，指向拥有该分片的 MDS（shard1 → mds1 @ 137.33.24.132，shard2 → mds2 @ 137.33.24.133，shard3 → mds3 @ 137.33.24.134）。内核在你第一次 `cd` 进入某个分片时会跨越这个 referral。
 
 直接在根目录写入也可以——共享的 RonDB catalogue 使得根级别的条目从每个 MDS 都可见——但**建议优先在分片内工作**，这样通过 referral 将元数据负载分散到各个 MDS 上，而不是全部集中到你挂载的那个 MDS。
-## 2.3 冒烟测试  
+# 3 冒烟测试  
 
 在客户端上，可以使用某个shard进行读写操作：  
 ```bash
@@ -1197,7 +1210,7 @@ cd "$SHARD"     # leave the smoke dir before removing it
 sudo rm -rf "$SHARD/smoke"
 ```
 
-## 2.4 服务管理  
+# 4 服务管理  
 1. pnfs-mds管理
 ```bash
 sudo systemctl restart pnfs-mds
@@ -1226,3 +1239,8 @@ a. Rondb管理node: `sudo systemctl start rondb-mgmd`
 b. Rondb数据node: `sudo systemctl start rondb-ndbmtd`  
 c. `ndb_mgm -e show` 检查data node全部连接完毕后，在所有pnfs-mds节点执行： mount所有ds和 `systemctl start pnfs-mds`  
 d. 客户端挂载pnfs
+
+# 5 配置与构建注意事项（源码核对）
+1. **commit_* 批处理键已废弃**：`commit_batch_size` / `commit_batch_max_bytes` / `commit_flush_ms` / `commit_queue_depth` 在当前代码里仅为 API 兼容保留——commit queue 的写入线程、环形缓冲、攒批在 Level-B 清理中已移除，现在 `commit_queue_submit()` 在调用方 RPC 线程上**同步**经 catalogue vtable 直发后端，四个键传入即忽略。调优它们没有效果，不要再写进 mds.conf。
+2. **企业版模块开关**：`src/modules/` 下的 resilver、rebalance、tiering、quota、replication、wrr、ds_prealloc、layout_commit_aggregator 是企业版可选模块，由 `-DENABLE_<NAME>=ON/OFF` 控制。当前开源仓库里这些模块只有 stub（社区版语义：wrr 降级为纯 RR、quota 不限制、resilver/rebalance/tiering 不可用、LAYOUTCOMMIT 聚合器为空句柄每次同步写 NDB）；ds_gc、layout_cache、observability 在社区仓库有完整实现。
+3. **多 MDS 的协议状态持久化**：见 2.2.5 的 transient_state_cache 说明；`open_state_*` / `session_*` 桶大小键（如 open_state_file_buckets）仅在 write-through 模式（transient_state_cache=false）下影响 NDB 写放大，内存表本身默认已按 2^20 桶 / 1024 锁条预分配。
